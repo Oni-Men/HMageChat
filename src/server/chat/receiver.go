@@ -58,6 +58,7 @@ func (receiver Receiver) WaitMessage() {
 
 // Join オブザーバーにJoinを通知する
 func (receiver Receiver) Join(context *def.Context) {
+	context.Type = def.Join
 	receiver.Observer <- Notification{
 		Connection: receiver.Connection,
 		Context:    context,
@@ -66,6 +67,7 @@ func (receiver Receiver) Join(context *def.Context) {
 
 // Leave オブザーバーにLeaveを通知する
 func (receiver Receiver) Leave(context *def.Context) {
+	context.Type = def.Leave
 	receiver.Observer <- Notification{
 		Connection: receiver.Connection,
 		Context:    context,
@@ -74,6 +76,7 @@ func (receiver Receiver) Leave(context *def.Context) {
 
 // Message オブザーバーにMessageを通知する
 func (receiver Receiver) Message(context *def.Context) {
+	context.Type = def.Message
 	receiver.Observer <- Notification{
 		Context: context,
 	}

@@ -6,7 +6,10 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"os/signal"
+	"time"
 
+	"../def"
 	"./chat"
 )
 
@@ -25,9 +28,11 @@ func main() {
 
 	fmt.Printf("ポート「%d」で接続を待機中です\n", tcpAddr.Port)
 
+	quit := make(chan os.Signal)
 	channel := make(chan chat.Notification)
 	observer := chat.Observer{Senders: make([]chat.Sender, 0, 5), Subject: channel}
 
+	go waitQuit(quit, channel)
 	go observer.WaitNotice()
 	waitClient(listener, observer, channel)
 }
@@ -78,6 +83,22 @@ func loadServerConfig() ServerConfig {
 	}
 
 	return serverConfig
+}
+
+func waitQuit(quit chan os.Signal, channel chan<- chat.Notification) {
+	signal.Notify(quit, os.Interrupt)
+
+	<-quit
+
+	noticeClose(channel)
+
+	time.Sleep(1 * time.Second)
+	os.Exit(0)
+}
+
+func noticeClose(channel chan<- chat.Notification) {
+	fmt.Println("send all connection close")
+	channel <- chat.Notification{Context: &def.Context{Type: def.Close}}
 }
 
 func resolveAddress(port int) *net.TCPAddr {

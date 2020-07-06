@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"time"
@@ -41,12 +40,16 @@ func main() {
 	fmt.Printf("%s:%dに接続を開始します。\n", host, port)
 
 	//ゴルーチン間でコンテキストをやり取りするためのチャネル
+	exit := make(chan bool)
 	channel := make(chan def.Context)
 	connection, error := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+
+	receiver := Receiver{Connection: connection, UUID: playerUUID, DisplayName: displayName}
 
 	//最後に閉じる
 	defer connection.Close()
 	defer close(channel)
+	defer close(exit)
 
 	if error != nil {
 		fmt.Println("接続に失敗しました。")
@@ -55,10 +58,10 @@ func main() {
 
 	fmt.Printf("接続成功! UUID: %s\n", playerUUID)
 
-	go waitMessage(connection)
+	go receiver.WaitMessage()
 	go sendMessage(connection, channel)
 
-	channel <- generateJoin()
+	channel <- generateJoin().Normalize()
 
 	handleInput(channel)
 
@@ -67,19 +70,21 @@ func main() {
 }
 
 func sendMessage(connection net.Conn, channel <-chan def.Context) {
-	context := <-channel
+	for {
+		context := <-channel
+		json := toJSON(context)
 
-	json := toJSON(context)
+		if json == nil {
+			continue
+		}
 
-	if json != nil {
 		_, err := connection.Write(json)
 
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 	}
-
-	sendMessage(connection, channel)
 }
 
 func handleInput(channel chan<- def.Context) {
@@ -91,31 +96,6 @@ func handleInput(channel chan<- def.Context) {
 	channel <- generateContext(def.Message, stdin.Text())
 
 	handleInput(channel)
-}
-
-func waitMessage(connection net.Conn) {
-	buf := make([]byte, 4*1024)
-	n, err := connection.Read(buf)
-
-	if err != nil && err != io.EOF {
-		panic(err)
-	} else {
-		context := new(def.Context)
-		if err := json.Unmarshal(buf[:n], context); err != nil {
-			fmt.Println("Couldn't unmarshal json.", err)
-		} else {
-			time, err := time.Parse(time.RFC1123, context.Timestamp)
-			formattedTime := time.Format("15:04:05")
-
-			if err != nil {
-				fmt.Println("Couldn't parse timestamp:", time)
-			} else {
-				fmt.Printf("[%s][%s] %s\n", context.UUID, formattedTime, context.Body)
-			}
-		}
-
-	}
-	waitMessage(connection)
 }
 
 func generateContext(ctxType def.ContextType, body string) def.Context {
